@@ -1,0 +1,7 @@
+# GitHub Pages Configuration
+
+domain: example.com
+baseurl: "/my-tetris-game-race"
+
+# Enable GitHub Pages on main branch
+# https://docs.github.com/en/pages/getting-started-with-github-pages
