@@ -3,17 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Funny Turbo Drift</title>
+    <title>Turbo Drift Fix</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
-        body { background: #000; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: sans-serif; }
-        #game-wrapper { position: relative; width: 320px; height: 500px; border: 3px solid #444; background: #0a0a0a; }
+        body { background: #111; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: sans-serif; }
+        
+        /* Сузили обертку до 280px */
+        #game-wrapper { position: relative; width: 280px; height: 500px; border: 4px solid #333; background: #000; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
         canvas { display: block; width: 100%; height: 100%; }
+
         #top-bar { position: absolute; top: 0; left: 0; width: 100%; padding: 10px; display: flex; justify-content: space-between; z-index: 10; pointer-events: none; }
-        #score-val { color: #0ff; font-size: 24px; font-weight: bold; }
-        #pause-btn { background: #333; color: #fff; border: 1px solid #0ff; padding: 5px; cursor: pointer; pointer-events: auto; }
-        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; flex-direction: column; align-items: center; justify-content: center; color: #fff; z-index: 20; text-align: center; }
-        #funny-phrase { color: #f05; font-size: 20px; margin-bottom: 10px; }
+        #score-val { color: #0ff; font-size: 22px; font-weight: bold; text-shadow: 1px 1px #000; }
+        #pause-btn { background: #222; color: #0ff; border: 1px solid #0ff; padding: 4px 8px; cursor: pointer; pointer-events: auto; font-size: 12px; }
+
+        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; color: #fff; z-index: 100; text-align: center; cursor: pointer; }
+        #dead-screen { border: 2px solid #f05; }
+        #funny-phrase { color: #f05; font-size: 18px; margin-bottom: 10px; padding: 0 10px; }
+        .restart-hint { background: #f05; color: #fff; padding: 10px; border-radius: 5px; margin-top: 15px; animation: blink 1s infinite; }
+        
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
@@ -21,15 +29,20 @@
 <div id="game-wrapper">
     <div id="top-bar">
         <div id="score-val">0000</div>
-        <button id="pause-btn">ПАУЗА</button>
+        <button id="pause-btn" id="p-btn">ПАУЗА</button>
     </div>
     <canvas id="game"></canvas>
-    <div id="pause-screen" class="screen"><h1>ПАУЗА</h1><p>Кликни для продолжения</p></div>
-    <div id="dead-screen" class="screen">
+    
+    <!-- Экраны теперь сами по себе кнопки -->
+    <div id="pause-screen" class="screen" onclick="togglePause()">
+        <h1>ПАУЗА</h1>
+        <p>Жми, чтобы ехать!</p>
+    </div>
+    
+    <div id="dead-screen" class="screen" onclick="reset()">
         <div id="funny-phrase"></div>
-        <p id="final-score"></p>
-        <h2>РЕСТАРТ?</h2>
-        <p>(нажми в любое место)</p>
+        <p id="final-score" style="font-size: 24px; color: #0ff;"></p>
+        <div class="restart-hint">ТАПНИ ДЛЯ РЕСТАРТА</div>
     </div>
 </div>
 
@@ -41,28 +54,24 @@
     const pauseScreen = document.getElementById('pause-screen');
     const pauseBtn = document.getElementById('pause-btn');
 
-    canvas.width = 320; canvas.height = 500;
-    const B = 16, L_LEFT = 6, L_RIGHT = 14;
+    // Ширина 280 (17 блоков по 16px с небольшим запасом)
+    canvas.width = 280; canvas.height = 500;
+    const B = 16, L_LEFT = 4, L_RIGHT = 11; 
     let score = 0, speed = 1.0, isDead = false, isPaused = false;
     let px = L_LEFT, tx = L_LEFT, enemies = [], lastSpawn = 0;
 
-    const phrases = ["Права купил?", "Столб победил!", "Минус тачка!", "Красиво летел!", "Не гоняйте, пацаны"];
-    const car = [[0,1,0],[1,1,1],[0,1,0],[1,0,1]];
+    const phrases = ["ПРАВА КУПИЛ?", "СТОЛБ ВНЕЗАПНО!", "МАМА, Я В ТЕЛЕВИЗОРЕ!", "МИНУС КРЕДИТВАГЕН", "ПЕРЕСТРОЕНИЕ НЕ УДАЛОСЬ"];
+    const carModel = [[0,1,0],[1,1,1],[0,1,0],[1,0,1]];
 
-    // ГЛАВНОЕ ИСПРАВЛЕНИЕ: Один обработчик на всё окно
-    window.addEventListener('mousedown', (e) => handleAction(e.clientX));
-    window.addEventListener('touchstart', (e) => {
-        handleAction(e.touches[0].clientX);
-    }, {passive: false});
-
-    function handleAction(clientX) {
-        if (isDead) { reset(); return; }
-        if (isPaused) { togglePause(); return; }
+    // Универсальное управление PointerEvents
+    window.addEventListener('pointerdown', (e) => {
+        if (isDead || isPaused) return; 
+        if (e.target === pauseBtn) return;
 
         const rect = canvas.getBoundingClientRect();
-        const x = clientX - rect.left;
+        const x = e.clientX - rect.left;
         tx = (x < rect.width / 2) ? L_LEFT : L_RIGHT;
-    }
+    });
 
     pauseBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -70,6 +79,7 @@
     });
 
     function togglePause() {
+        if (isDead) return;
         isPaused = !isPaused;
         pauseScreen.style.display = isPaused ? 'flex' : 'none';
     }
@@ -78,6 +88,7 @@
         score = 0; speed = 1.0; isDead = false; isPaused = false;
         enemies = []; px = tx = L_LEFT;
         deadScreen.style.display = 'none';
+        pauseScreen.style.display = 'none';
         scoreVal.innerText = "0000";
     }
 
@@ -89,38 +100,43 @@
     }
 
     function update() {
-        if (isPaused) { requestAnimationFrame(update); return; }
-        ctx.clearRect(0, 0, 320, 500);
+        if (!isPaused) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        if (!isDead) {
-            px += (tx - px) * 0.2;
-            draw(px, 24, car, "#0ff");
+            // Разметка дороги (пунктир)
+            ctx.fillStyle = "#222";
+            ctx.fillRect(canvas.width/2 - 2, (Date.now()/20)%40 - 40, 4, 600);
 
-            let now = Date.now();
-            if (now - lastSpawn > 1000/speed) {
-                enemies.push({ x: Math.random() > 0.5 ? L_LEFT : L_RIGHT, y: -5, c: "#f05" });
-                lastSpawn = now;
-            }
-        }
+            if (!isDead) {
+                px += (tx - px) * 0.25; // чуть быстрее отклик
+                draw(px, 24, carModel, "#0ff");
 
-        for (let i = enemies.length - 1; i >= 0; i--) {
-            let e = enemies[i];
-            if (!isDead) e.y += speed * 0.2;
-            draw(e.x, e.y, car, e.c);
-
-            // Коллизия
-            if (!isDead && Math.abs(px - e.x) < 2 && Math.abs(24 - e.y) < 3) {
-                isDead = true;
-                document.getElementById('funny-phrase').innerText = phrases[Math.floor(Math.random()*phrases.length)];
-                document.getElementById('final-score').innerText = "СЧЕТ: " + score;
-                deadScreen.style.display = 'flex';
+                let now = Date.now();
+                if (now - lastSpawn > 1200/speed) {
+                    enemies.push({ x: Math.random() > 0.5 ? L_LEFT : L_RIGHT, y: -5, c: "#f05" });
+                    lastSpawn = now;
+                }
             }
 
-            if (e.y > 32) {
-                enemies.splice(i, 1);
-                score += 10;
-                scoreVal.innerText = score.toString().padStart(4, '0');
-                speed += 0.02;
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                let e = enemies[i];
+                if (!isDead) e.y += speed * 0.2;
+                draw(e.x, e.y, carModel, e.c);
+
+                // Коллизия (уточненная)
+                if (!isDead && Math.abs(px - e.x) < 2.5 && Math.abs(24 - e.y) < 3.5) {
+                    isDead = true;
+                    document.getElementById('funny-phrase').innerText = phrases[Math.floor(Math.random()*phrases.length)];
+                    document.getElementById('final-score').innerText = "СЧЕТ: " + score;
+                    deadScreen.style.display = 'flex';
+                }
+
+                if (e.y > 35) {
+                    enemies.splice(i, 1);
+                    score += 10;
+                    scoreVal.innerText = score.toString().padStart(4, '0');
+                    speed += 0.03;
+                }
             }
         }
         requestAnimationFrame(update);
