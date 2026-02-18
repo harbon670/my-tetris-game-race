@@ -1,80 +1,172 @@
-    // ... (весь HTML и стили из предыдущего ответа) ...
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Retro Road Rash - AI Adjusted</title>
+    <style>
+        body { background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; color: #0f0; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+        #game-container { position: relative; border: 4px solid #333; box-shadow: 0 0 20px rgba(0,255,255,0.2); }
+        canvas { background: #050505; display: block; image-rendering: pixelated; }
+        #score { position: absolute; top: 10px; left: 10px; font-size: 20px; text-shadow: 2px 2px #000; }
+        .controls { margin-top: 15px; color: #555; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="score">SCORE: 0</div>
+    <canvas id="gameCanvas" width="300" height="500"></canvas>
+</div>
+<div class="controls">Используй СТРЕЛКИ или A/D для маневров</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+
+    const BLOCK_SIZE = 15;
+    const LANE_LEFT = 6;
+    const LANE_RIGHT = 14;
 
     let score = 0;
-    let gameSpeed = 1.6; 
+    let gameSpeed = 1.0; 
+    let targetSpeed = 1.0; 
     let gameOver = false;
     let playerX = LANE_LEFT;
     let targetX = LANE_LEFT;
     let enemies = [];
+    let particles = [];
     let lastSpawn = 0;
-    let nextSpawnDelay = 2000; // Переменная задержка
 
     const carMatrix = [[0,1,0],[1,1,1],[0,1,0],[1,0,1]];
-    const truckMatrix = [[1,1,1],[1,1,1],[1,1,1],[1,1,1],[1,0,1]]; // Короткая фура
+    const truckMatrix = [[1,1,1],[1,1,1],[1,1,1],[1,1,1],[1,0,1]];
 
-    // ... (функции drawEntity и resetGame такие же) ...
+    // Управление
+    window.addEventListener('keydown', e => {
+        if (e.key === 'ArrowLeft' || e.key === 'a') targetX = LANE_LEFT;
+        if (e.key === 'ArrowRight' || e.key === 'd') targetX = LANE_RIGHT;
+        if (gameOver && e.key === ' ') resetGame();
+    });
+
+    function drawEntity(gridX, gridY, matrix, color) {
+        ctx.fillStyle = color;
+        matrix.forEach((row, dy) => {
+            row.forEach((cell, dx) => {
+                if (cell) {
+                    ctx.fillRect((gridX + dx) * BLOCK_SIZE, (gridY + dy) * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+                }
+            });
+        });
+    }
+
+    function createExplosion(x, y, color) {
+        for (let i = 0; i < 20; i++) {
+            particles.push({
+                x: x * BLOCK_SIZE,
+                y: y * BLOCK_SIZE,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10,
+                life: 1.0,
+                color: color
+            });
+        }
+    }
+
+    function resetGame() {
+        score = 0;
+        gameSpeed = 1.0;
+        targetSpeed = 1.0;
+        gameOver = false;
+        enemies = [];
+        particles = [];
+        playerX = LANE_LEFT;
+        targetX = LANE_LEFT;
+        scoreEl.innerText = "SCORE: 0";
+        loop();
+    }
 
     function loop() {
-      if (gameOver) return;
-      requestAnimationFrame(loop);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Отрисовка разметки (для ощущения движения)
-      ctx.strokeStyle = "#222";
-      ctx.setLineDash([20, 20]);
-      ctx.lineDashOffset = -(Date.now() / (20/gameSpeed));
-      ctx.beginPath();
-      ctx.moveTo(canvas.width/2, 0); ctx.lineTo(canvas.width/2, canvas.height);
-      ctx.stroke();
-
-      playerX += (targetX - playerX) * 0.15;
-      drawEntity(playerX, 14, carMatrix, "#0ff");
-
-      let now = Date.now();
-      // ЛОГИКА ШАШЕК
-      if (now - lastSpawn > nextSpawnDelay / (gameSpeed / 1.5)) {
-        let lastX = enemies.length > 0 ? enemies[enemies.length-1].x : null;
-        let newX;
-        
-        // С шансом 70% ставим машину на противоположную сторону от предыдущей (шашки)
-        if (lastX && Math.random() < 0.7) {
-          newX = (lastX === LANE_LEFT) ? LANE_RIGHT : LANE_LEFT;
-          nextSpawnDelay = 600 + Math.random() * 800; // Быстрая перекладка
-        } else {
-          newX = Math.random() > 0.5 ? LANE_LEFT : LANE_RIGHT;
-          nextSpawnDelay = 1500 + Math.random() * 1000; // Длинное окно
+        if (gameOver) {
+            ctx.fillStyle = "rgba(0,0,0,0.7)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#fff";
+            ctx.font = "20px Courier New";
+            ctx.fillText("CRASHED!", 100, 220);
+            ctx.font = "14px Courier New";
+            ctx.fillText("PRESS SPACE TO RETRY", 70, 260);
+            return;
         }
 
-        enemies.push({ 
-          x: newX, 
-          y: -6, 
-          type: Math.random() < 0.2 ? 'truck' : 'car' 
+        requestAnimationFrame(loop);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 1. Плавное ускорение
+        gameSpeed += (targetSpeed - gameSpeed) * 0.005;
+
+        // Отрисовка дороги
+        ctx.strokeStyle = "#222";
+        ctx.setLineDash([30, 30]);
+        ctx.lineDashOffset = -(Date.now() / (10 / gameSpeed));
+        ctx.beginPath();
+        ctx.moveTo(canvas.width/2, 0); ctx.lineTo(canvas.width/2, canvas.height);
+        ctx.stroke();
+
+        // Игрок (плавное смещение полосы)
+        playerX += (targetX - playerX) * 0.15;
+        drawEntity(playerX, 25, carMatrix, "#0ff");
+
+        // 2. Умный спавн (Шашки + Дистанция)
+        let now = Date.now();
+        let minGap = 12; // Минимум блоков между машинами
+        let isRoadClear = enemies.length === 0 || (enemies[enemies.length - 1].y > minGap);
+
+        if (now - lastSpawn > 1500 / gameSpeed && isRoadClear) {
+            let lastX = enemies.length > 0 ? enemies[enemies.length-1].x : LANE_LEFT;
+            // Всегда выбираем свободную полосу для "шашек"
+            let newX = (lastX === LANE_LEFT) ? LANE_RIGHT : LANE_LEFT;
+            
+            enemies.push({
+                x: newX,
+                y: -6,
+                type: Math.random() < 0.2 ? 'truck' : 'car',
+                color: Math.random() < 0.2 ? "#ffaa00" : "#ff0055"
+            });
+            lastSpawn = now;
+        }
+
+        // Враги
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            let e = enemies[i];
+            let matrix = e.type === 'truck' ? truckMatrix : carMatrix;
+            
+            e.y += gameSpeed * 0.15; // Плавное движение
+            drawEntity(e.x, e.y, matrix, e.color);
+
+            // Коллизия
+            let pY = 25;
+            if (!(playerX + 2 < e.x || playerX > e.x + 2 || pY + 3 < e.y || pY > e.y + matrix.length)) {
+                gameOver = true;
+                createExplosion(playerX + 1, pY + 1, "#0ff");
+                createExplosion(e.x + 1, e.y + 1, e.color);
+            }
+
+            if (e.y > 35) {
+                enemies.splice(i, 1);
+                score += 10;
+                scoreEl.innerText = "SCORE: " + score;
+                if (score % 100 === 0) targetSpeed += 0.2;
+            }
+        }
+
+        // Частицы взрыва
+        particles.forEach((p, i) => {
+            p.x += p.vx; p.y += p.vy; p.life -= 0.02;
+            ctx.fillStyle = `rgba(${p.color === "#0ff" ? "0,255,255" : "255,0,85"}, ${p.life})`;
+            ctx.fillRect(p.x, p.y, 4, 4);
+            if (p.life <= 0) particles.splice(i, 1);
         });
-        lastSpawn = now;
-      }
-
-      for (let i = enemies.length - 1; i >= 0; i--) {
-        let e = enemies[i];
-        let matrix = e.type === 'truck' ? truckMatrix : carMatrix;
-        
-        e.y += gameSpeed / 25; 
-        drawEntity(e.x, e.y, matrix, e.type === 'truck' ? "#ffaa00" : "#ff0055");
-        
-        // Коллизия (с запасом на узкие места)
-        if (!(playerX + 1.8 < e.x || playerX > e.x + 1.8 || 14 + 3.2 < e.y || 14 > e.y + (matrix.length - 0.8))) {
-          gameOver = true;
-        }
-
-        if (e.y > 20) {
-          enemies.splice(i, 1);
-          score += 10;
-          scoreEl.innerText = "SCORE: " + score;
-          if (score % 100 === 0 && gameSpeed < 6) gameSpeed += 0.2;
-        }
-      }
-
-      if (gameOver) {
-        // ... (отрисовка Game Over как раньше) ...
-      }
     }
+
     loop();
+</script>
+</body>
+</html>
