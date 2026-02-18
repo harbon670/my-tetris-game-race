@@ -6,17 +6,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <style>
     body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
-    #ui { text-align: center; margin-bottom: 10px; cursor: pointer; background: #222; padding: 10px; border-radius: 15px; border: 3px solid #ff0055; box-shadow: 0 0 15px #ff0055; width: 220px; }
+    #ui { text-align: center; margin-bottom: 10px; cursor: pointer; background: #222; padding: 10px; border-radius: 15px; border: 3px solid #ff0055; box-shadow: 0 0 15px #ff0055; width: 220px; user-select: none; }
     #score { font-size: 22px; color: #0ff; margin: 0; font-weight: bold; }
-    canvas { border: 5px solid #333; background: #050505; max-height: 70vh; max-width: 90vw; }
-    .status { font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+    canvas { border: 5px solid #333; background: #050505; max-height: 70vh; max-width: 90vw; touch-action: none; }
+    .status { font-size: 10px; color: #aaa; text-transform: uppercase; }
   </style>
 </head>
 <body>
 
   <div id="ui" onclick="resetGame()">
     <p id="score">SCORE: 0</p>
-    <div class="status">ТЫКНИ ДЛЯ РЕСТАРТА</div>
+    <div class="status">ТЫКНИ СЮДА ДЛЯ РЕСТАРТА</div>
   </div>
   <canvas id="game" width="300" height="540"></canvas>
 
@@ -30,7 +30,7 @@
     const LANE_RIGHT = 5.5;
 
     let score = 0;
-    let gameSpeed = 2; // НАЧАЛЬНАЯ СКОРОСТЬ (было 4)
+    let gameSpeed = 1.5; // СДЕЛАЛ ЕЩЕ МЕДЛЕННЕЕ
     let gameOver = false;
     let playerX = LANE_LEFT;
     let targetX = LANE_LEFT;
@@ -42,17 +42,23 @@
     const phrases = [
       "ПРАВА В КУПЛЕННОМ|ТОРТЕ? 🎂",
       "СТОЛБ БЫЛ|МАГНИТНЫМ! 🧲",
-      "ТЫ КУДА ПРЁШЬ,|КАСАТИК? 👁️",
-      "А ТОРМОЗ СЛЕВА,|ЕСЛИ ЧТО...",
+      "ТЫ КУДА ПРЁШЬ? 👁️",
+      "ТОРМОЗ СЛЕВА,|ЕСЛИ ЧТО...",
       "МИНУС ПАПИНА|МАШИНА 📉",
       "ОЛЕГ, ТЫ ГДЕ ТАК|ЕЗДИТЬ УЧИЛСЯ?!",
       "МАМА АМА|КРИМИНАЛ... ОЙ 🚓",
       "ПЕРЕПУТАЛ ПЕДАЛИ,|ДА? 👋",
-      "ГРАФИКА — ТОП,|ВОДИТЕЛЬ — ПОП",
+      "ГРАФИКА ТОП,|ВОДИТЕЛЬ К-ПОП",
       "НУ ВСЁ, ПРИЕХАЛИ.|ВЫХОДИ."
     ];
 
-    const carMatrix = [[0,1,0],[1,1,1],[0,1,0],[1,0,1]];
+    // Матрица машины (ВАЖНО: без нее ничего не видно!)
+    const carMatrix = [
+      [0, 1, 0],
+      [1, 1, 1],
+      [0, 1, 0],
+      [1, 0, 1]
+    ];
 
     function createExplosion(x, y) {
       for(let i=0; i<25; i++) {
@@ -79,13 +85,13 @@
     }
 
     function checkCollision(ex, ey) {
-      // Чуть более строгая коллизия, чтобы не бесило
-      return !(targetX + 1.8 < ex || targetX > ex + 1.8 || 14 + 2.5 < ey || 14 > ey + 3);
+      // Игрок всегда на y = 14. Проверяем пересечение с врагом.
+      return !(targetX + 2 < ex || targetX > ex + 2 || 14 + 3 < ey || 14 > ey + 3);
     }
 
     function resetGame() {
       if (!gameOver) return;
-      score = 0; gameSpeed = 2; enemies = []; particles = []; targetX = LANE_LEFT; playerX = LANE_LEFT;
+      score = 0; gameSpeed = 1.5; enemies = []; particles = []; targetX = LANE_LEFT; playerX = LANE_LEFT;
       gameOver = false; shake = 0;
       scoreEl.innerText = "SCORE: 0";
       loop();
@@ -93,6 +99,7 @@
 
     window.addEventListener('pointerdown', e => {
       if (gameOver) return;
+      // Определяем сторону клика относительно центра экрана
       targetX = (e.clientX < window.innerWidth / 2) ? LANE_LEFT : LANE_RIGHT;
       if (navigator.vibrate) navigator.vibrate(10);
     });
@@ -107,27 +114,30 @@
         shake *= 0.8;
       }
 
-      ctx.fillStyle = "rgba(10, 10, 10, 0.6)";
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#050505";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Разметка
+      // Дорожная разметка
       ctx.strokeStyle = "#222";
       ctx.setLineDash([20, 20]);
-      ctx.lineDashOffset = -(Date.now() / 20 * gameSpeed);
+      ctx.lineDashOffset = -(Date.now() / 20);
       ctx.beginPath();
       ctx.moveTo(canvas.width/2, 0); ctx.lineTo(canvas.width/2, canvas.height);
       ctx.stroke();
 
-      playerX += (targetX - playerX) * 0.15; // Более плавный переход
+      // Движение игрока
+      playerX += (targetX - playerX) * 0.2; 
       drawCar(playerX, 14, "#0ff");
 
-      // Редкий спавн врагов (зависит от скорости)
-      if (Math.random() < 0.015) {
+      // Спавн врагов (медленный)
+      if (Math.random() < 0.01) {
         enemies.push({ x: Math.random() > 0.5 ? LANE_LEFT : LANE_RIGHT, y: -5 });
       }
 
-      enemies.forEach((e, i) => {
-        e.y += gameSpeed / 15;
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        let e = enemies[i];
+        e.y += gameSpeed / 10;
         drawCar(e.x, e.y, "#ff0055");
         
         if (checkCollision(e.x, e.y)) {
@@ -141,10 +151,11 @@
           enemies.splice(i, 1);
           score += 10;
           scoreEl.innerText = "SCORE: " + score;
-          if(score % 50 === 0) gameSpeed += 0.2; // Медленное ускорение
+          gameSpeed += 0.05; // Совсем чуть-чуть ускоряем
         }
-      });
+      }
 
+      // Частицы взрыва
       particles.forEach((p, i) => {
         p.x += p.vx; p.y += p.vy; p.life -= 0.03;
         ctx.fillStyle = p.color;
@@ -165,18 +176,17 @@
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       
-      // Рисуем многострочный текст
       const lines = endPhrase.split('|');
-      ctx.font = "bold 18px sans-serif";
+      ctx.font = "bold 20px sans-serif";
       
       lines.forEach((line, index) => {
         ctx.fillStyle = "#ff0055";
-        ctx.fillText(line, canvas.width / 2, canvas.height / 2 - 20 + (index * 25));
+        ctx.fillText(line, canvas.width / 2, canvas.height / 2 - 30 + (index * 30));
       });
       
       ctx.font = "14px sans-serif";
       ctx.fillStyle = "#fff";
-      ctx.fillText("ИТОГ: " + score, canvas.width / 2, canvas.height / 2 + 50);
+      ctx.fillText("ТВОЙ СЧЕТ: " + score, canvas.width / 2, canvas.height / 2 + 60);
     }
 
     loop();
