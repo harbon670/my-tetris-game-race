@@ -1,171 +1,123 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Retro Road Rash - harbon670 github</title>
+    <title>Retro Racer Touch</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body { background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; color: #0f0; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
-        #game-container { position: relative; border: 4px solid #333; box-shadow: 0 0 20px rgba(0,255,255,0.2); }
-        canvas { background: #050505; display: block; image-rendering: pixelated; }
-        #score { position: absolute; top: 10px; left: 10px; font-size: 20px; text-shadow: 2px 2px #000; }
-        .controls { margin-top: 15px; color: #555; font-size: 12px; }
+        body { background: #000; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; touch-action: none; font-family: monospace; }
+        #game-container { position: relative; width: 300px; height: 500px; }
+        canvas { background: #050505; border: 2px solid #333; display: block; }
+        #ui-top { position: absolute; top: 10px; left: 0; width: 100%; display: flex; justify-content: space-around; align-items: center; pointer-events: none; }
+        #score { color: #0ff; font-size: 22px; text-shadow: 2px 2px #000; }
+        #pause-btn { background: rgba(255,255,255,0.1); border: 1px solid #0ff; color: #0ff; padding: 5px 15px; pointer-events: auto; cursor: pointer; border-radius: 4px; }
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; flex-direction: column; align-items: center; justify-content: center; color: #fff; pointer-events: none; }
     </style>
 </head>
 <body>
 
 <div id="game-container">
-    <div id="score">SCORE: 0</div>
+    <div id="ui-top">
+        <div id="score">0000</div>
+        <button id="pause-btn">ПАУЗА</button>
+    </div>
     <canvas id="gameCanvas" width="300" height="500"></canvas>
+    <div id="pause-overlay" class="overlay"><h1 style="color:#0ff">ПАУЗА</h1><p>ТАП ДЛЯ ПРОДОЛЖЕНИЯ</p></div>
+    <div id="death-overlay" class="overlay"><h1 style="color:#f05">АВАРИЯ!</h1><p>ТАП ДЛЯ РЕСТАРТА</p></div>
 </div>
-<div class="controls">Используй СТРЕЛКИ или A/D для маневров</div>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreEl = document.getElementById('score');
+    const pauseBtn = document.getElementById('pause-btn');
+    const pauseOverlay = document.getElementById('pause-overlay');
+    const deathOverlay = document.getElementById('death-overlay');
 
-    const BLOCK_SIZE = 15;
-    const LANE_LEFT = 6;
-    const LANE_RIGHT = 14;
+    const BLOCK_SIZE = 15, LANE_LEFT = 6, LANE_RIGHT = 14;
+    let score = 0, gameSpeed = 1.0, targetSpeed = 1.0;
+    let gameOver = false, isPaused = false;
+    let playerX = LANE_LEFT, targetX = LANE_LEFT;
+    let enemies = [], particles = [], lastSpawn = 0;
 
-    let score = 0;
-    let gameSpeed = 1.0; 
-    let targetSpeed = 1.0; 
-    let gameOver = false;
-    let playerX = LANE_LEFT;
-    let targetX = LANE_LEFT;
-    let enemies = [];
-    let particles = [];
-    let lastSpawn = 0;
-
-    const carMatrix = [[0,1,0],[1,1,1],[0,1,0],[1,0,1]];
-    const truckMatrix = [[1,1,1],[1,1,1],[1,1,1],[1,1,1],[1,0,1]];
+    const car = [[0,1,0],[1,1,1],[0,1,0],[1,0,1]];
+    const truck = [[1,1,1],[1,1,1],[1,1,1],[1,1,1],[1,0,1]];
 
     // Управление
-    window.addEventListener('keydown', e => {
-        if (e.key === 'ArrowLeft' || e.key === 'a') targetX = LANE_LEFT;
-        if (e.key === 'ArrowRight' || e.key === 'd') targetX = LANE_RIGHT;
-        if (gameOver && e.key === ' ') resetGame();
-    });
+    const handleInput = (e) => {
+        if (e.target === pauseBtn) { togglePause(); return; }
+        if (gameOver) { resetGame(); return; }
+        if (isPaused) { togglePause(); return; }
+
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const rect = canvas.getBoundingClientRect();
+        const xRel = clientX - rect.left;
+        targetX = (xRel < rect.width / 2) ? LANE_LEFT : LANE_RIGHT;
+    };
+
+    function togglePause() {
+        isPaused = !isPaused;
+        pauseOverlay.style.display = isPaused ? 'flex' : 'none';
+    }
+
+    window.addEventListener('touchstart', handleInput);
+    window.addEventListener('mousedown', handleInput);
 
     function drawEntity(gridX, gridY, matrix, color) {
         ctx.fillStyle = color;
-        matrix.forEach((row, dy) => {
-            row.forEach((cell, dx) => {
-                if (cell) {
-                    ctx.fillRect((gridX + dx) * BLOCK_SIZE, (gridY + dy) * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
-                }
-            });
-        });
-    }
-
-    function createExplosion(x, y, color) {
-        for (let i = 0; i < 20; i++) {
-            particles.push({
-                x: x * BLOCK_SIZE,
-                y: y * BLOCK_SIZE,
-                vx: (Math.random() - 0.5) * 10,
-                vy: (Math.random() - 0.5) * 10,
-                life: 1.0,
-                color: color
-            });
-        }
+        matrix.forEach((row, dy) => row.forEach((cell, dx) => {
+            if (cell) ctx.fillRect((gridX + dx) * BLOCK_SIZE, (gridY + dy) * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+        }));
     }
 
     function resetGame() {
-        score = 0;
-        gameSpeed = 1.0;
-        targetSpeed = 1.0;
-        gameOver = false;
-        enemies = [];
-        particles = [];
-        playerX = LANE_LEFT;
-        targetX = LANE_LEFT;
-        scoreEl.innerText = "SCORE: 0";
-        loop();
+        score = 0; gameSpeed = 1.0; targetSpeed = 1.0; 
+        gameOver = false; isPaused = false;
+        enemies = []; particles = []; playerX = targetX = LANE_LEFT;
+        deathOverlay.style.display = 'none';
+        scoreEl.innerText = "0000";
     }
 
     function loop() {
-        if (gameOver) {
-            ctx.fillStyle = "rgba(0,0,0,0.7)";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = "#fff";
-            ctx.font = "20px Courier New";
-            ctx.fillText("CRASHED!", 100, 220);
-            ctx.font = "14px Courier New";
-            ctx.fillText("PRESS SPACE TO RETRY", 70, 260);
-            return;
-        }
+        if (!gameOver && !isPaused) {
+            ctx.clearRect(0, 0, 300, 500);
+            gameSpeed += (targetSpeed - gameSpeed) * 0.005;
 
+            // Разметка
+            ctx.strokeStyle = "#222"; ctx.setLineDash([20, 20]);
+            ctx.lineDashOffset = -(Date.now() / (15 / gameSpeed));
+            ctx.beginPath(); ctx.moveTo(150, 0); ctx.lineTo(150, 500); ctx.stroke();
+
+            playerX += (targetX - playerX) * 0.2;
+            drawEntity(playerX, 25, car, "#0ff");
+
+            let now = Date.now();
+            if (now - lastSpawn > 1400/gameSpeed && (enemies.length === 0 || enemies[enemies.length-1].y > 11)) {
+                let lastX = enemies.length > 0 ? enemies[enemies.length-1].x : LANE_LEFT;
+                enemies.push({ x: lastX === LANE_LEFT ? LANE_RIGHT : LANE_LEFT, y: -6, 
+                              type: Math.random() < 0.2 ? 'truck' : 'car', color: Math.random() < 0.3 ? "#fa0" : "#f05" });
+                lastSpawn = now;
+            }
+
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                let e = enemies[i], m = e.type === 'truck' ? truck : car;
+                e.y += gameSpeed * 0.16;
+                drawEntity(e.x, e.y, m, e.color);
+
+                if (!(playerX+1.8 < e.x || playerX > e.x+1.8 || 25+3 < e.y || 25 > e.y+m.length)) {
+                    gameOver = true;
+                    deathOverlay.style.display = 'flex';
+                }
+
+                if (e.y > 35) {
+                    enemies.splice(i, 1);
+                    score += 10;
+                    scoreEl.innerText = score.toString().padStart(4, '0');
+                    if (score % 100 === 0) targetSpeed += 0.15;
+                }
+            }
+        }
         requestAnimationFrame(loop);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // 1. Плавное ускорение
-        gameSpeed += (targetSpeed - gameSpeed) * 0.005;
-
-        // Отрисовка дороги
-        ctx.strokeStyle = "#222";
-        ctx.setLineDash([30, 30]);
-        ctx.lineDashOffset = -(Date.now() / (10 / gameSpeed));
-        ctx.beginPath();
-        ctx.moveTo(canvas.width/2, 0); ctx.lineTo(canvas.width/2, canvas.height);
-        ctx.stroke();
-
-        // Игрок (плавное смещение полосы)
-        playerX += (targetX - playerX) * 0.15;
-        drawEntity(playerX, 25, carMatrix, "#0ff");
-
-        // 2. Умный спавн (Шашки + Дистанция)
-        let now = Date.now();
-        let minGap = 12; // Минимум блоков между машинами
-        let isRoadClear = enemies.length === 0 || (enemies[enemies.length - 1].y > minGap);
-
-        if (now - lastSpawn > 1500 / gameSpeed && isRoadClear) {
-            let lastX = enemies.length > 0 ? enemies[enemies.length-1].x : LANE_LEFT;
-            // Всегда выбираем свободную полосу для "шашек"
-            let newX = (lastX === LANE_LEFT) ? LANE_RIGHT : LANE_LEFT;
-            
-            enemies.push({
-                x: newX,
-                y: -6,
-                type: Math.random() < 0.2 ? 'truck' : 'car',
-                color: Math.random() < 0.2 ? "#ffaa00" : "#ff0055"
-            });
-            lastSpawn = now;
-        }
-
-        // Враги
-        for (let i = enemies.length - 1; i >= 0; i--) {
-            let e = enemies[i];
-            let matrix = e.type === 'truck' ? truckMatrix : carMatrix;
-            
-            e.y += gameSpeed * 0.15; // Плавное движение
-            drawEntity(e.x, e.y, matrix, e.color);
-
-            // Коллизия
-            let pY = 25;
-            if (!(playerX + 2 < e.x || playerX > e.x + 2 || pY + 3 < e.y || pY > e.y + matrix.length)) {
-                gameOver = true;
-                createExplosion(playerX + 1, pY + 1, "#0ff");
-                createExplosion(e.x + 1, e.y + 1, e.color);
-            }
-
-            if (e.y > 35) {
-                enemies.splice(i, 1);
-                score += 10;
-                scoreEl.innerText = "SCORE: " + score;
-                if (score % 100 === 0) targetSpeed += 0.2;
-            }
-        }
-
-        // Частицы взрыва
-        particles.forEach((p, i) => {
-            p.x += p.vx; p.y += p.vy; p.life -= 0.02;
-            ctx.fillStyle = `rgba(${p.color === "#0ff" ? "0,255,255" : "255,0,85"}, ${p.life})`;
-            ctx.fillRect(p.x, p.y, 4, 4);
-            if (p.life <= 0) particles.splice(i, 1);
-        });
     }
-
     loop();
 </script>
 </body>
