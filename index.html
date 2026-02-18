@@ -2,21 +2,20 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Epic Fail Racer: Truck Edition</title>
+  <title>Epic Fail Racer: 7% Slim Edition</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <style>
     body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
     #ui { text-align: center; margin-bottom: 10px; cursor: pointer; background: #222; padding: 15px; border-radius: 15px; border: 3px solid #ff0055; box-shadow: 0 0 20px #ff0055; width: 240px; user-select: none; }
-    #score { font-size: 24px; color: #0ff; margin: 0; font-weight: bold; text-shadow: 0 0 10px #0ff; }
+    #score { font-size: 24px; color: #0ff; margin: 0; font-weight: bold; }
     canvas { border: 4px solid #444; background: #050505; max-height: 75vh; max-width: 95vw; border-radius: 8px; }
-    .status { font-size: 11px; color: #aaa; margin-top: 5px; letter-spacing: 1px; }
   </style>
 </head>
 <body>
 
   <div id="ui" onclick="resetGame()">
     <p id="score">SCORE: 0</p>
-    <div class="status">КЛИКНИ ДЛЯ ПЕРЕЗАГРУЗКИ</div>
+    <div style="font-size: 10px; color: #aaa;">КЛИКНИ ДЛЯ РЕСТАРТА</div>
   </div>
   <canvas id="game" width="300" height="540"></canvas>
 
@@ -26,46 +25,51 @@
     const scoreEl = document.getElementById('score');
 
     const grid = 30;
+    const SCALE = 0.93; // ТЕ САМЫЕ -7% РАЗМЕРА
+    const OFFSET = (grid * (1 - SCALE)) / 2; // Центровка уменьшенного блока
+    
     const LANE_LEFT = 1.5;
     const LANE_RIGHT = 5.5;
 
     let score = 0;
-    let gameSpeed = 3.5; 
+    let gameSpeed = 3; 
     let gameOver = false;
     let playerX = LANE_LEFT;
     let targetX = LANE_LEFT;
     let enemies = [];
-    let particles = [];
-    let shake = 0;
-    let endPhrase = "";
+    let lastSpawn = 0;
 
-    const carMatrix = [[0,1,0],[1,1,1],[0,1,0],[1,0,1]];
-    const truckMatrix = [[1,1,1],[1,1,1],[1,1,1],[1,1,1],[1,0,1],[1,0,1]];
-
-    const phrases = [
-        "ФУРА — НЕ ТЁТЯ,|НЕ ПОДВИНЕТСЯ! 🚛",
-        "ТОРМОЗА ПРИДУМАЛИ|ТРУСЫ? 🛑",
-        "ДИСТАНЦИЯ?|НЕ, НЕ СЛЫШАЛ..",
-        "КАТОК ВЫЗЫВАЛИ? 🚜",
-        "ПЕРЕД ФУРОЙ|НЕ ГАЗУЙ! 😤"
+    const carMatrix = [
+      [0, 1, 0],
+      [1, 1, 1],
+      [0, 1, 0],
+      [1, 0, 1]
     ];
 
-    function createExplosion(x, y) {
-      for(let i=0; i<30; i++) {
-        particles.push({
-          x: (x + 1) * grid, y: (y + 2) * grid,
-          vx: (Math.random() - 0.5) * 15, vy: (Math.random() - 0.5) * 15,
-          life: 1.0, color: Math.random() > 0.5 ? '#ff0055' : '#0ff'
-        });
-      }
-    }
+    const truckMatrix = [
+      [1, 1, 1],
+      [1, 0, 1],
+      [1, 1, 1],
+      [1, 1, 1],
+      [1, 1, 1],
+      [1, 0, 1]
+    ];
 
     function drawEntity(x, y, matrix, color) {
       ctx.fillStyle = color;
-      ctx.shadowBlur = 10; ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = color;
       matrix.forEach((row, r) => {
         row.forEach((cell, c) => {
-          if (cell) ctx.fillRect((x + c) * grid, (y + r) * grid, grid - 3, grid - 3);
+          if (cell) {
+            // Отрисовка со скейлом 0.93
+            ctx.fillRect(
+              (x + c) * grid + OFFSET, 
+              (y + r) * grid + OFFSET, 
+              (grid - 3) * SCALE, 
+              (grid - 3) * SCALE
+            );
+          }
         });
       });
       ctx.shadowBlur = 0;
@@ -73,88 +77,69 @@
 
     function resetGame() {
       if (!gameOver) return;
-      score = 0; gameSpeed = 3.5; enemies = []; particles = []; targetX = LANE_LEFT; playerX = LANE_LEFT;
-      gameOver = false; shake = 0; scoreEl.innerText = "SCORE: 0";
+      score = 0; gameSpeed = 3; enemies = []; targetX = LANE_LEFT; playerX = LANE_LEFT;
+      gameOver = false; scoreEl.innerText = "SCORE: 0";
       loop();
     }
 
     window.addEventListener('pointerdown', e => {
       if (gameOver) return;
       targetX = (e.clientX < window.innerWidth / 2) ? LANE_LEFT : LANE_RIGHT;
-      if (navigator.vibrate) navigator.vibrate(20);
     });
 
     function loop() {
       if (gameOver) return;
       requestAnimationFrame(loop);
-
-      ctx.save();
-      if (shake > 0) {
-        ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
-        shake *= 0.9;
-      }
-
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Отрисовка игрока
-      playerX += (targetX - playerX) * 0.18; 
+      // Плавное движение
+      playerX += (targetX - playerX) * 0.15;
       drawEntity(playerX, 14, carMatrix, "#0ff");
 
-      // Спавн с учетом скорости
-      if (Math.random() < 0.015 + (gameSpeed/400)) {
-          let isTruck = Math.random() < 0.3;
-          enemies.push({ 
-              x: Math.random() > 0.5 ? LANE_LEFT : LANE_RIGHT, 
-              y: -8, 
-              type: isTruck ? 'truck' : 'car' 
-          });
+      // Спавн (зависит от времени, а не только от шанса)
+      let now = Date.now();
+      if (now - lastSpawn > 1200 / (gameSpeed / 3)) {
+        let isTruck = Math.random() < 0.25;
+        enemies.push({ 
+          x: Math.random() > 0.5 ? LANE_LEFT : LANE_RIGHT, 
+          y: -8, 
+          type: isTruck ? 'truck' : 'car' 
+        });
+        lastSpawn = now;
       }
 
       for (let i = enemies.length - 1; i >= 0; i--) {
         let e = enemies[i];
         let matrix = e.type === 'truck' ? truckMatrix : carMatrix;
-        let color = e.type === 'truck' ? "#ffaa00" : "#ff0055";
         
-        e.y += gameSpeed / 10;
-        drawEntity(e.x, e.y, matrix, color);
+        e.y += gameSpeed / 15;
+        drawEntity(e.x, e.y, matrix, e.type === 'truck' ? "#ffaa00" : "#ff0055");
         
-        // Коллизия
-        let h = matrix.length;
-        if (!(playerX + 2.5 < e.x || playerX > e.x + 2.5 || 14 + 3.5 < e.y || 14 > e.y + (h - 0.5))) {
-          gameOver = true; shake = 25; createExplosion(playerX, 14);
-          endPhrase = phrases[Math.floor(Math.random() * phrases.length)];
+        // Коллизия с учетом уменьшенного размера (SCALE)
+        let hitBoxH = matrix.length * SCALE;
+        let hitBoxW = 3 * SCALE;
+        
+        if (!(playerX + hitBoxW < e.x || playerX > e.x + hitBoxW || 14 + 3.5 < e.y || 14 > e.y + (hitBoxH - 0.5))) {
+          gameOver = true;
         }
 
         if (e.y > 20) {
           enemies.splice(i, 1);
-          score += e.type === 'truck' ? 20 : 10;
+          score += 10;
           scoreEl.innerText = "SCORE: " + score;
-          gameSpeed += 0.12; 
+          // Плавное ускорение каждые 50 очков
+          if (score % 50 === 0 && gameSpeed < 10) gameSpeed += 0.2;
         }
       }
 
-      particles.forEach((p, i) => {
-        p.x += p.vx; p.y += p.vy; p.life -= 0.025;
-        ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
-        ctx.fillRect(p.x, p.y, 5, 5);
-        if (p.life <= 0) particles.splice(i, 1);
-      });
-      ctx.globalAlpha = 1;
-
-      if (gameOver) drawGameOver();
-      ctx.restore();
-    }
-
-    function drawGameOver() {
-      ctx.fillStyle = "rgba(0,0,0,0.9)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#ff0055";
-      ctx.font = "bold 22px sans-serif";
-      endPhrase.split('|').forEach((l, i) => ctx.fillText(l, 150, 240 + i*30));
-      ctx.fillStyle = "#fff";
-      ctx.font = "16px sans-serif";
-      ctx.fillText("ИТОГ: " + score, 150, 320);
+      if (gameOver) {
+        ctx.fillStyle = "rgba(0,0,0,0.8)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+        ctx.font = "20px sans-serif";
+        ctx.fillText("БАБАХ! СЧЕТ: " + score, 150, 270);
+      }
     }
 
     loop();
