@@ -3,46 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Turbo Drift Fix</title>
+    <title>Funny Turbo Drift Fix</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: none; }
-        body { background: #111; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: sans-serif; }
-        
-        /* Сузили обертку до 280px */
-        #game-wrapper { position: relative; width: 280px; height: 500px; border: 4px solid #333; background: #000; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        body { background: #000; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: 'Comic Sans MS', cursive, sans-serif; }
+        #game-wrapper { position: relative; width: 280px; height: 500px; border: 3px solid #444; background: #0a0a0a; }
         canvas { display: block; width: 100%; height: 100%; }
-
         #top-bar { position: absolute; top: 0; left: 0; width: 100%; padding: 10px; display: flex; justify-content: space-between; z-index: 10; pointer-events: none; }
-        #score-val { color: #0ff; font-size: 22px; font-weight: bold; text-shadow: 1px 1px #000; }
-        #pause-btn { background: #222; color: #0ff; border: 1px solid #0ff; padding: 4px 8px; cursor: pointer; pointer-events: auto; font-size: 12px; }
-
-        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; color: #fff; z-index: 100; text-align: center; cursor: pointer; }
-        #dead-screen { border: 2px solid #f05; }
-        #funny-phrase { color: #f05; font-size: 18px; margin-bottom: 10px; padding: 0 10px; }
-        .restart-hint { background: #f05; color: #fff; padding: 10px; border-radius: 5px; margin-top: 15px; animation: blink 1s infinite; }
-        
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        #score-val { color: #0ff; font-size: 24px; font-weight: bold; text-shadow: 2px 2px #000; }
+        #pause-btn { background: #333; color: #fff; border: 2px solid #0ff; padding: 5px 10px; cursor: pointer; border-radius: 5px; pointer-events: auto; }
+        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; color: #fff; z-index: 20; text-align: center; padding: 20px; }
+        #funny-phrase { color: #f05; font-size: 22px; margin-bottom: 20px; font-weight: bold; }
+        .btn-restart { margin-top: 20px; background: #0ff; color: #000; padding: 10px 20px; font-weight: bold; border-radius: 5px; animation: blink 0.8s infinite; }
+        @keyframes blink { 50% { opacity: 0.6; } }
     </style>
 </head>
 <body>
 
-<div id="game-wrapper">
+<div id="game-wrapper" id="cont">
     <div id="top-bar">
         <div id="score-val">0000</div>
-        <button id="pause-btn" id="p-btn">ПАУЗА</button>
+        <button id="pause-btn">ПАУЗА</button>
     </div>
     <canvas id="game"></canvas>
     
-    <!-- Экраны теперь сами по себе кнопки -->
     <div id="pause-screen" class="screen" onclick="togglePause()">
-        <h1>ПАУЗА</h1>
-        <p>Жми, чтобы ехать!</p>
+        <h1>ЧИЛЛИМ...</h1>
+        <p>Тапни, чтобы ехать дальше</p>
     </div>
-    
+
     <div id="dead-screen" class="screen" onclick="reset()">
         <div id="funny-phrase"></div>
-        <p id="final-score" style="font-size: 24px; color: #0ff;"></p>
-        <div class="restart-hint">ТАПНИ ДЛЯ РЕСТАРТА</div>
+        <p id="final-score" style="color:#0ff; font-size: 20px;"></p>
+        <div class="btn-restart">РЕСТАРТ</div>
     </div>
 </div>
 
@@ -51,26 +44,34 @@
     const ctx = canvas.getContext('2d');
     const scoreVal = document.getElementById('score-val');
     const deadScreen = document.getElementById('dead-screen');
-    const pauseScreen = document.getElementById('pause-screen');
+    const phraseEl = document.getElementById('funny-phrase');
     const pauseBtn = document.getElementById('pause-btn');
 
-    // Ширина 280 (17 блоков по 16px с небольшим запасом)
     canvas.width = 280; canvas.height = 500;
-    const B = 16, L_LEFT = 4, L_RIGHT = 11; 
+    const B = 16, L_LEFT = 3, L_RIGHT = 10.5; // Скорректировано под 280px
     let score = 0, speed = 1.0, isDead = false, isPaused = false;
     let px = L_LEFT, tx = L_LEFT, enemies = [], lastSpawn = 0;
 
-    const phrases = ["ПРАВА КУПИЛ?", "СТОЛБ ВНЕЗАПНО!", "МАМА, Я В ТЕЛЕВИЗОРЕ!", "МИНУС КРЕДИТВАГЕН", "ПЕРЕСТРОЕНИЕ НЕ УДАЛОСЬ"];
-    const carModel = [[0,1,0],[1,1,1],[0,1,0],[1,0,1]];
+    const phrases = [
+        "Права в карты выиграл?", "Столб дорогу перебегал!", "Мама, меня фура задавила!", 
+        "Тише будь", "Тормоза придумали клоуны!", "Красиво летел, но недолго", 
+        "Не гоняйте пацаны", "Зато подрифтил!", "Минус одна тачка в кредит"
+    ];
 
-    // Универсальное управление PointerEvents
-    window.addEventListener('pointerdown', (e) => {
-        if (isDead || isPaused) return; 
-        if (e.target === pauseBtn) return;
+    const car = [[0,1,0],[1,1,1],[0,1,0],[1,0,1]];
 
+    // ИСПРАВЛЕННЫЙ СЕНСОР (с учетом границ элемента)
+    function handleMove(clientX) {
+        if (isDead || isPaused) return;
         const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        tx = (x < rect.width / 2) ? L_LEFT : L_RIGHT;
+        const relativeX = clientX - rect.left;
+        // Если нажали в левой половине игрового поля — едем влево, иначе вправо
+        tx = (relativeX < rect.width / 2) ? L_LEFT : L_RIGHT;
+    }
+
+    window.addEventListener('pointerdown', (e) => {
+        if(e.target === pauseBtn) return;
+        handleMove(e.clientX);
     });
 
     pauseBtn.addEventListener('click', (e) => {
@@ -81,14 +82,13 @@
     function togglePause() {
         if (isDead) return;
         isPaused = !isPaused;
-        pauseScreen.style.display = isPaused ? 'flex' : 'none';
+        document.getElementById('pause-screen').style.display = isPaused ? 'flex' : 'none';
     }
 
     function reset() {
         score = 0; speed = 1.0; isDead = false; isPaused = false;
         enemies = []; px = tx = L_LEFT;
         deadScreen.style.display = 'none';
-        pauseScreen.style.display = 'none';
         scoreVal.innerText = "0000";
     }
 
@@ -103,30 +103,31 @@
         if (!isPaused) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Разметка дороги (пунктир)
-            ctx.fillStyle = "#222";
-            ctx.fillRect(canvas.width/2 - 2, (Date.now()/20)%40 - 40, 4, 600);
+            // Отрисовка дороги (разметка)
+            ctx.fillStyle = "#1a1a1a";
+            ctx.fillRect(canvas.width/2 - 2, 0, 4, canvas.height);
 
             if (!isDead) {
-                px += (tx - px) * 0.25; // чуть быстрее отклик
-                draw(px, 24, carModel, "#0ff");
+                px += (tx - px) * 0.25; 
+                draw(px, 24, car, "#0ff");
 
                 let now = Date.now();
-                if (now - lastSpawn > 1200/speed) {
-                    enemies.push({ x: Math.random() > 0.5 ? L_LEFT : L_RIGHT, y: -5, c: "#f05" });
+                if (now - lastSpawn > 1100/speed) {
+                    enemies.push({ x: Math.random() > 0.5 ? L_LEFT : L_RIGHT, y: -5, c: Math.random() > 0.3 ? "#f05" : "#fa0" });
                     lastSpawn = now;
                 }
             }
 
             for (let i = enemies.length - 1; i >= 0; i--) {
                 let e = enemies[i];
-                if (!isDead) e.y += speed * 0.2;
-                draw(e.x, e.y, carModel, e.c);
+                if (!isDead) e.y += speed * 0.22;
+                draw(e.x, e.y, car, e.c);
 
-                // Коллизия (уточненная)
-                if (!isDead && Math.abs(px - e.x) < 2.5 && Math.abs(24 - e.y) < 3.5) {
+                // Коллизия
+                if (!isDead && Math.abs(px - e.x) < 2.5 && Math.abs(24 - e.y) < 3.8) {
                     isDead = true;
-                    document.getElementById('funny-phrase').innerText = phrases[Math.floor(Math.random()*phrases.length)];
+                    if(navigator.vibrate) navigator.vibrate(100);
+                    phraseEl.innerText = phrases[Math.floor(Math.random()*phrases.length)];
                     document.getElementById('final-score').innerText = "СЧЕТ: " + score;
                     deadScreen.style.display = 'flex';
                 }
@@ -135,7 +136,7 @@
                     enemies.splice(i, 1);
                     score += 10;
                     scoreVal.innerText = score.toString().padStart(4, '0');
-                    speed += 0.03;
+                    speed += 0.04;
                 }
             }
         }
