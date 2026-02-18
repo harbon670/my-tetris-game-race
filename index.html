@@ -1,0 +1,146 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Retro Brick Racer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>
+    body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
+    #ui { text-align: center; margin-bottom: 10px; cursor: pointer; background: rgba(0,255,255,0.1); padding: 10px 20px; border-radius: 15px; border: 1px solid #0ff; user-select: none; width: 200px; }
+    #score { font-size: 24px; color: #0ff; margin: 0; font-weight: bold; }
+    canvas { border: 4px solid #333; background: #050505; max-height: 70vh; box-shadow: 0 0 20px rgba(0,255,255,0.2); }
+  </style>
+</head>
+<body>
+
+  <div id="ui" onclick="resetGame()">
+    <p id="score">SCORE: 0</p>
+    <div style="font-size: 10px; color: #aaa;">TAP TO RESTART</div>
+  </div>
+  <canvas id="game" width="300" height="540"></canvas>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+
+    const grid = 30;
+    const cols = 10;
+    const rows = 18;
+
+    let score = 0;
+    let speed = 15;
+    let count = 0;
+    let gameOver = false;
+    let playerPos = 4; // Колонка игрока
+    let enemies = [];
+    let endPhrase = "";
+
+    const phrases = ["ПРАВА КУПИЛ? 🚗", "СТОЛБ БЫЛ БЛИЖЕ...", "НЕ ВПИСАЛСЯ!", "ТОРМОЗА ПРИДУМАЛИ ТРУСЫ", "КУДА ПРЁШЬ?! 😠"];
+
+    // Матрица машины (3х4 блока)
+    const carMatrix = [
+      [0, 1, 0],
+      [1, 1, 1],
+      [0, 1, 0],
+      [1, 0, 1]
+    ];
+
+    function drawCar(x, y, color) {
+      ctx.fillStyle = color;
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 3; c++) {
+          if (carMatrix[r][c]) {
+            ctx.fillRect((x + c) * grid, (y + r) * grid, grid - 2, grid - 2);
+          }
+        }
+      }
+    }
+
+    function checkCollision(ex, ey) {
+      // Упрощенная проверка: пересекаются ли прямоугольники машин
+      return !(playerPos + 2 < ex || playerPos > ex + 2 || 14 + 3 < ey || 14 > ey + 3);
+    }
+
+    function spawnEnemy() {
+      const x = Math.random() > 0.5 ? 1 : 6; // Две полосы
+      enemies.push({ x, y: -4 });
+    }
+
+    function resetGame() {
+      if (!gameOver) return;
+      score = 0; speed = 15; enemies = []; playerPos = 4; gameOver = false;
+      scoreEl.innerText = "SCORE: 0";
+      loop();
+    }
+
+    // Управление
+    window.addEventListener('pointerdown', e => {
+      if (gameOver) return;
+      const clickX = e.clientX;
+      if (clickX < window.innerWidth / 2) {
+        if (playerPos > 1) playerPos -= 5; // Смена полосы влево
+      } else {
+        if (playerPos < 6) playerPos += 5; // Смена полосы вправо
+      }
+      if (navigator.vibrate) navigator.vibrate(10);
+    });
+
+    function loop() {
+      if (gameOver) return;
+      requestAnimationFrame(loop);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Рисуем разметку (движущуюся)
+      ctx.strokeStyle = "#333";
+      ctx.setLineDash([20, 20]);
+      ctx.lineDashOffset = -count * 5;
+      ctx.beginPath();
+      ctx.moveTo(canvas.width / 2, 0); ctx.lineTo(canvas.width / 2, canvas.height);
+      ctx.stroke();
+
+      // Рисуем игрока
+      drawCar(playerPos, 14, "#0ff");
+
+      // Логика врагов
+      if (++count > speed) {
+        count = 0;
+        if (Math.random() < 0.05) spawnEnemy();
+        
+        enemies.forEach((enemy, index) => {
+          enemy.y++;
+          if (checkCollision(enemy.x, enemy.y)) {
+            gameOver = true;
+            endPhrase = phrases[Math.floor(Math.random() * phrases.length)];
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+          }
+          if (enemy.y > rows) {
+            enemies.splice(index, 1);
+            score += 10;
+            scoreEl.innerText = "SCORE: " + score;
+            if (score % 100 === 0 && speed > 5) speed--; // Ускорение
+          }
+        });
+      }
+
+      enemies.forEach(enemy => drawCar(enemy.x, enemy.y, "#f00"));
+
+      if (gameOver) {
+        ctx.fillStyle = "rgba(0,0,0,0.8)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#f0f";
+        ctx.font = "bold 20px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(endPhrase, canvas.width / 2, canvas.height / 2);
+        ctx.fillStyle = "#fff";
+        ctx.font = "14px sans-serif";
+        ctx.fillText("ЖМИ НА СЧЕТ, ЧТОБЫ ЕХАТЬ СНОВА", canvas.width / 2, canvas.height / 2 + 50);
+      }
+    }
+
+    spawnEnemy();
+    loop();
+  </script>
+</body>
+</html>
