@@ -1,109 +1,54 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Epic Fail Racer: 7% Slim Edition</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <style>
-    body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
-    #ui { text-align: center; margin-bottom: 10px; cursor: pointer; background: #222; padding: 15px; border-radius: 15px; border: 3px solid #ff0055; box-shadow: 0 0 20px #ff0055; width: 240px; user-select: none; }
-    #score { font-size: 24px; color: #0ff; margin: 0; font-weight: bold; }
-    canvas { border: 4px solid #444; background: #050505; max-height: 75vh; max-width: 95vw; border-radius: 8px; }
-  </style>
-</head>
-<body>
-
-  <div id="ui" onclick="resetGame()">
-    <p id="score">SCORE: 0</p>
-    <div style="font-size: 10px; color: #aaa;">КЛИКНИ ДЛЯ РЕСТАРТА</div>
-  </div>
-  <canvas id="game" width="300" height="540"></canvas>
-
-  <script>
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
-    const scoreEl = document.getElementById('score');
-
-    const grid = 30;
-    const SCALE = 0.93; // ТЕ САМЫЕ -7% РАЗМЕРА
-    const OFFSET = (grid * (1 - SCALE)) / 2; // Центровка уменьшенного блока
-    
-    const LANE_LEFT = 1.5;
-    const LANE_RIGHT = 5.5;
+    // ... (весь HTML и стили из предыдущего ответа) ...
 
     let score = 0;
-    let gameSpeed = 3; 
+    let gameSpeed = 1.6; 
     let gameOver = false;
     let playerX = LANE_LEFT;
     let targetX = LANE_LEFT;
     let enemies = [];
     let lastSpawn = 0;
+    let nextSpawnDelay = 2000; // Переменная задержка
 
-    const carMatrix = [
-      [0, 1, 0],
-      [1, 1, 1],
-      [0, 1, 0],
-      [1, 0, 1]
-    ];
+    const carMatrix = [[0,1,0],[1,1,1],[0,1,0],[1,0,1]];
+    const truckMatrix = [[1,1,1],[1,1,1],[1,1,1],[1,1,1],[1,0,1]]; // Короткая фура
 
-    const truckMatrix = [
-      [1, 1, 1],
-      [1, 0, 1],
-      [1, 1, 1],
-      [1, 1, 1],
-      [1, 1, 1],
-      [1, 0, 1]
-    ];
-
-    function drawEntity(x, y, matrix, color) {
-      ctx.fillStyle = color;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = color;
-      matrix.forEach((row, r) => {
-        row.forEach((cell, c) => {
-          if (cell) {
-            // Отрисовка со скейлом 0.93
-            ctx.fillRect(
-              (x + c) * grid + OFFSET, 
-              (y + r) * grid + OFFSET, 
-              (grid - 3) * SCALE, 
-              (grid - 3) * SCALE
-            );
-          }
-        });
-      });
-      ctx.shadowBlur = 0;
-    }
-
-    function resetGame() {
-      if (!gameOver) return;
-      score = 0; gameSpeed = 3; enemies = []; targetX = LANE_LEFT; playerX = LANE_LEFT;
-      gameOver = false; scoreEl.innerText = "SCORE: 0";
-      loop();
-    }
-
-    window.addEventListener('pointerdown', e => {
-      if (gameOver) return;
-      targetX = (e.clientX < window.innerWidth / 2) ? LANE_LEFT : LANE_RIGHT;
-    });
+    // ... (функции drawEntity и resetGame такие же) ...
 
     function loop() {
       if (gameOver) return;
       requestAnimationFrame(loop);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Плавное движение
+      // Отрисовка разметки (для ощущения движения)
+      ctx.strokeStyle = "#222";
+      ctx.setLineDash([20, 20]);
+      ctx.lineDashOffset = -(Date.now() / (20/gameSpeed));
+      ctx.beginPath();
+      ctx.moveTo(canvas.width/2, 0); ctx.lineTo(canvas.width/2, canvas.height);
+      ctx.stroke();
+
       playerX += (targetX - playerX) * 0.15;
       drawEntity(playerX, 14, carMatrix, "#0ff");
 
-      // Спавн (зависит от времени, а не только от шанса)
       let now = Date.now();
-      if (now - lastSpawn > 1200 / (gameSpeed / 3)) {
-        let isTruck = Math.random() < 0.25;
+      // ЛОГИКА ШАШЕК
+      if (now - lastSpawn > nextSpawnDelay / (gameSpeed / 1.5)) {
+        let lastX = enemies.length > 0 ? enemies[enemies.length-1].x : null;
+        let newX;
+        
+        // С шансом 70% ставим машину на противоположную сторону от предыдущей (шашки)
+        if (lastX && Math.random() < 0.7) {
+          newX = (lastX === LANE_LEFT) ? LANE_RIGHT : LANE_LEFT;
+          nextSpawnDelay = 600 + Math.random() * 800; // Быстрая перекладка
+        } else {
+          newX = Math.random() > 0.5 ? LANE_LEFT : LANE_RIGHT;
+          nextSpawnDelay = 1500 + Math.random() * 1000; // Длинное окно
+        }
+
         enemies.push({ 
-          x: Math.random() > 0.5 ? LANE_LEFT : LANE_RIGHT, 
-          y: -8, 
-          type: isTruck ? 'truck' : 'car' 
+          x: newX, 
+          y: -6, 
+          type: Math.random() < 0.2 ? 'truck' : 'car' 
         });
         lastSpawn = now;
       }
@@ -112,14 +57,11 @@
         let e = enemies[i];
         let matrix = e.type === 'truck' ? truckMatrix : carMatrix;
         
-        e.y += gameSpeed / 15;
+        e.y += gameSpeed / 25; 
         drawEntity(e.x, e.y, matrix, e.type === 'truck' ? "#ffaa00" : "#ff0055");
         
-        // Коллизия с учетом уменьшенного размера (SCALE)
-        let hitBoxH = matrix.length * SCALE;
-        let hitBoxW = 3 * SCALE;
-        
-        if (!(playerX + hitBoxW < e.x || playerX > e.x + hitBoxW || 14 + 3.5 < e.y || 14 > e.y + (hitBoxH - 0.5))) {
+        // Коллизия (с запасом на узкие места)
+        if (!(playerX + 1.8 < e.x || playerX > e.x + 1.8 || 14 + 3.2 < e.y || 14 > e.y + (matrix.length - 0.8))) {
           gameOver = true;
         }
 
@@ -127,22 +69,12 @@
           enemies.splice(i, 1);
           score += 10;
           scoreEl.innerText = "SCORE: " + score;
-          // Плавное ускорение каждые 50 очков
-          if (score % 50 === 0 && gameSpeed < 10) gameSpeed += 0.2;
+          if (score % 100 === 0 && gameSpeed < 6) gameSpeed += 0.2;
         }
       }
 
       if (gameOver) {
-        ctx.fillStyle = "rgba(0,0,0,0.8)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#fff";
-        ctx.textAlign = "center";
-        ctx.font = "20px sans-serif";
-        ctx.fillText("БАБАХ! СЧЕТ: " + score, 150, 270);
+        // ... (отрисовка Game Over как раньше) ...
       }
     }
-
     loop();
-  </script>
-</body>
-</html>
